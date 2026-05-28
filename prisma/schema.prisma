@@ -4,15 +4,132 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
-}
+  provider = "prisma-client-js"
+  runtime  = "vercel-edge"
+    }
 
 datasource db {
   provider = "postgresql"
 }
 
-model TestUser {
-  id    Int    @id @default(autoincrement())
-  email String @unique
+model User { 
+  id            String    @id @default(cuid()) 
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime? @map("email_verified") 
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  memberships    CommunityMember[]
+  bookings       SessionBooking[] 
+  auditLogs      AuditLog[]
 }
+
+model Account { 
+  id                String  @id @default(cuid()) 
+  userId            String  @map("user_id") 
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id") 
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade) 
+  @@unique([provider, providerAccountId]) 
+  @@map("accounts") 
+} 
+
+
+model Session { 
+  id           String   @id @default(cuid()) 
+  sessionToken String   @unique @map("session_token") 
+  userId       String   @map("user_id") 
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade) 
+  @@map("sessions") 
+}
+
+model VerificationToken { 
+  identifier String
+  token      String
+  expires    DateTime
+  @@unique([identifier, token]) 
+  @@map("verification_tokens") 
+}
+
+enum CommunityRole {
+    ADMIN
+    MODERATOR
+    MEMBER
+}
+
+enum SessionStatus {
+    OPEN
+    FULL
+    CANCELLED
+}
+
+enum BookingStatus {
+    ACTIVE 
+    CANCELLED
+
+}
+
+model Community {
+  id    String  @id @default(cuid())
+  name  String  @unique
+  slug  String  @unique 
+  createdAt   DateTime  @default(now())
+  members     CommunityMember[] 
+  sessions    WellnessSession[]
+}
+
+model CommunityMember {
+  id    String  @id   @default(cuid())
+  user  User    @relation(fields: [userId] , references: [id], onDelete: Cascade)
+  community   Community   @relation(fields: [communityId] , references: [id] , onDelete: Cascade)
+  userId  String 
+  communityId   String 
+  role    CommunityRole   @default(MEMBER)
+  @@unique([userId , communityId])
+}
+
+model WellnessSession {
+  id    String    @id @default(cuid()) 
+  communityId     String    @default(cuid())
+  title   String?
+  startsAt    DateTime 
+  totalCapacity   Int 
+  seatsRemaining    Int 
+  status    SessionStatus  @default(OPEN)
+  createdAt   DateTime    @default(now())
+  community  Community  @relation(fields: [communityId] , references: [id])
+  bookings      SessionBooking[]
+}
+
+model SessionBooking {
+  id    String    @id  @default(cuid())
+  sessionId     String
+  userId      String  
+  status    BookingStatus     @default(ACTIVE)
+  bookedAt    DateTime      @default(now())
+  session   WellnessSession   @relation(fields: [sessionId] , references: [id])
+  user    User    @relation(fields: [userId] , references: [id])
+  @@unique([sessionId,userId])
+}
+
+model AuditLog {
+  id    String    @id  @default(cuid())
+  action    String  
+  actorId     String  
+  targetId    String 
+  timestamp     DateTime  @default(now())
+  actor  User  @relation(fields: [actorId] , references: [id])
+}
+
+
+
