@@ -23,6 +23,7 @@ model User {
   memberships    CommunityMember[]
   bookings       SessionBooking[] 
   auditLogs      AuditLog[]
+  communitiesCreated Community[]
 }
 
 model Account { 
@@ -79,13 +80,23 @@ enum BookingStatus {
 
 }
 
+enum VisibilityStatus {
+  PUBLIC
+  PRIVATE
+}
+
 model Community {
   id    String  @id @default(cuid())
   name  String  @unique
   slug  String  @unique 
+  description String?          @db.Text
+  tags        String[]         @default([])
+  visibility  VisibilityStatus @default(PUBLIC)
   createdAt   DateTime  @default(now())
+  createdById String
   members     CommunityMember[] 
   sessions    WellnessSession[]
+  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
 }
 
 model CommunityMember {
