@@ -24,6 +24,7 @@ model User {
   bookings       SessionBooking[] 
   auditLogs      AuditLog[]
   communitiesCreated Community[]
+  sessionsCreated WellnessSession[]
 }
 
 model Account { 
@@ -75,7 +76,7 @@ enum SessionStatus {
 }
 
 enum BookingStatus {
-    ACTIVE 
+    CONFIRMED 
     CANCELLED
 
 }
@@ -83,6 +84,18 @@ enum BookingStatus {
 enum VisibilityStatus {
   PUBLIC
   PRIVATE
+}
+
+enum AuditAction {
+  SESSION_CREATED
+  BOOKING_CREATED
+  BOOKING_CANCELLED
+}
+
+enum AuditEntity {
+  SESSION
+  BOOKING
+  COMMUNITY
 }
 
 model Community {
@@ -112,13 +125,17 @@ model CommunityMember {
 model WellnessSession {
   id    String    @id @default(cuid()) 
   communityId     String    @default(cuid())
-  title   String?
+  title   String
+  description     String?       @db.Text
   startsAt    DateTime 
+  endsAt          DateTime
   totalCapacity   Int 
   seatsRemaining    Int 
   status    SessionStatus  @default(OPEN)
   createdAt   DateTime    @default(now())
-  community  Community  @relation(fields: [communityId] , references: [id])
+  createdByUserId String
+  community  Community  @relation(fields: [communityId] , references: [id], onDelete: Cascade)
+  createdBy       User             @relation(fields: [createdByUserId], references: [id])
   bookings      SessionBooking[]
 }
 
@@ -126,8 +143,9 @@ model SessionBooking {
   id    String    @id  @default(cuid())
   sessionId     String
   userId      String  
-  status    BookingStatus     @default(ACTIVE)
-  bookedAt    DateTime      @default(now())
+  status    BookingStatus     @default(CONFIRMED)
+  createdAt    DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
   session   WellnessSession   @relation(fields: [sessionId] , references: [id])
   user    User    @relation(fields: [userId] , references: [id])
   @@unique([sessionId,userId])
@@ -135,9 +153,11 @@ model SessionBooking {
 
 model AuditLog {
   id    String    @id  @default(cuid())
-  action    String  
+  action        AuditAction
+  entityType    AuditEntity
   actorId     String  
-  targetId    String 
+  entityId      String
+  metadata      Json?
   timestamp     DateTime  @default(now())
   actor  User  @relation(fields: [actorId] , references: [id])
 }
