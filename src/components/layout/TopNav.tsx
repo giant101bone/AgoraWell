@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { AUTH_ROUTES } from "@/lib/auth/routes" // Ensure this matches your file path structure precisely
+import { AUTH_ROUTES } from "@/lib/auth/routes"
 
 interface TopNavProps {
   user: {
@@ -9,12 +9,24 @@ interface TopNavProps {
     email?: string | null
     image?: string | null
   }
+  onToggleDrawer: () => void // Added this line
 }
 
-export default function TopNav({ user }: TopNavProps) {
+export default function TopNav({ user, onToggleDrawer }: TopNavProps) {
   return (
-    <header className="h-16 border-b border-gray-200 bg-white px-6 flex items-center justify-between z-20 sticky top-0">
+    <header className="h-16 border-b border-gray-200 bg-white px-4 sm:px-6 flex items-center justify-between z-20 sticky top-0">
       <div className="flex items-center gap-2">
+        {/* Mobile Hamburger Menu Button */}
+        <button
+          onClick={onToggleDrawer}
+          className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg md:hidden focus:outline-none focus:ring-2 focus:ring-slate-950"
+          aria-label="Toggle navigation menu"
+        >
+          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
         <span className="text-xl">🏛️</span>
         <span className="font-bold text-gray-900 tracking-tight text-sm sm:text-base">AgoraWell Console</span>
       </div>
@@ -44,4 +56,3 @@ export default function TopNav({ user }: TopNavProps) {
     </header>
   )
 }
-// TopNav.tsx at src/components/layout/TopNav.tsx

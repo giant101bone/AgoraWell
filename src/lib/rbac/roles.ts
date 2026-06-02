@@ -1,4 +1,4 @@
-import {prisma} from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 
 export const COMMUNITY_ROLE = {
   ADMIN: "ADMIN",
@@ -27,7 +27,14 @@ export async function getCommunityMemberRole(userId: string, communityId: string
     },
   })
   
-  return (membership?.role as CommunityRole) || null
+  if (!membership) return null
+
+  // SAFE BRIDGE: Translates DB 'MODERATOR' enum to code 'MOD' smoothly
+  if ((membership.role as string) === "MODERATOR") {
+    return "MOD"
+  }
+  
+  return (membership.role as CommunityRole) || null
 }
 
 export async function requireCommunityRole(userId: string, communityId: string, minRole: CommunityRole) {

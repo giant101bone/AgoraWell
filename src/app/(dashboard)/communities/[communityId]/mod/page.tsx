@@ -2,6 +2,7 @@ import { listReportsAction, resolveReportAction } from "@/server/actions/moderat
 import { revalidatePath } from "next/cache"
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
+import MemberManagementList from "@/components/layout/MemberManagementList" // Imported
 
 interface Props {
   params: Promise<{ communityId: string }>
@@ -10,9 +11,17 @@ interface Props {
 export default async function ModerationQueuePage({ params }: Props) {
   const { communityId } = await params
 
+  // Resolve the community using the slug parameter field
   const community = await prisma.community.findFirst({
     where: { 
       slug: communityId 
+    },
+    include: {
+      members: {
+        include: {
+          user: true
+        }
+      }
     }
   })
 
@@ -29,13 +38,23 @@ export default async function ModerationQueuePage({ params }: Props) {
     revalidatePath(`/communities/${communityId}/mod`)
   }
 
+  // Format the community members list data structure cleanly for the UI component
+  const formattedMembers = community.members.map((m) => ({
+    id: m.user.id,
+    name: m.user.name || "Anonymous Member",
+    email: m.user.email || "",
+    role: m.role,
+  }))
+
   return (
-    <div className="p-8 max-w-4xl mx-auto text-black">
-      <h1 className="text-2xl font-bold tracking-tight">Community Management Queue</h1>
-      <p className="text-sm text-gray-500 mb-6">Process reported infractions and maintain system integrity.</p>
+    <div className="p-8 max-w-4xl mx-auto text-black space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Community Management Queue</h1>
+        <p className="text-sm text-gray-500">Process reported infractions and maintain system integrity.</p>
+      </div>
 
       {reports.length === 0 ? (
-        <p className="p-8 text-center border border-dashed rounded-xl text-gray-400 text-sm">
+        <p className="p-8 text-center border border-dashed rounded-xl text-gray-400 text-sm bg-white">
           Clean ledger! No active reports are currently flagged for review.
         </p>
       ) : (
@@ -66,6 +85,19 @@ export default async function ModerationQueuePage({ params }: Props) {
           ))}
         </div>
       )}
+
+      {/* --- PHASE 4.3 MEMBER MANAGEMENT SECTION --- */}
+      <div className="pt-4 border-t">
+        <div className="mb-4">
+          <h2 className="text-lg font-bold tracking-tight text-gray-900">Member Controls</h2>
+          <p className="text-xs text-gray-500">Revoke space access rights and issue policy warnings.</p>
+        </div>
+        <MemberManagementList 
+          communityId={community.id}
+          slug={communityId}
+          initialMembers={formattedMembers}
+        />
+      </div>
     </div>
   )
 }

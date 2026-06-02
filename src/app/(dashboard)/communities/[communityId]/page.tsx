@@ -7,6 +7,7 @@ import JoinLeaveButton from "@/components/community/JoinLeaveButton"
 import BookingActionButton from "@/components/community/BookingActionButton" 
 import { prisma } from "@/lib/prisma" 
 import RealtimeSessionList from "@/components/community/RealtimeSessionList"
+import DeleteSessionButton from "@/components/community/DeleteSessionButton" // Imported
 
 interface PageProps {
   params: Promise<{ communityId?: string; slug?: string }>
@@ -59,6 +60,9 @@ export default async function IndividualCommunityPage({ params }: PageProps) {
 
   const canManageSessions = ["ADMIN", "MOD", "MODERATOR"].includes(String(currentRole))
 
+  // Filter out cancelled sessions specifically so administrators can purge them directly
+  const cancelledSessions = sessions.filter(s => s.status === "CANCELLED")
+
   return (
     <div className="p-8 max-w-5xl mx-auto flex flex-col gap-6 text-black">
       <div className="border-b pb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -66,7 +70,15 @@ export default async function IndividualCommunityPage({ params }: PageProps) {
           <Link href="/communities" className="text-sm text-blue-600 hover:underline">← System Directory</Link>
           <h1 className="text-3xl font-bold tracking-tight mt-1">{community.name}</h1>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {canManageSessions && (
+            <Link
+              href={`/communities/${slug}/mod`}
+              className="px-3 py-1 text-xs font-semibold bg-gray-100 hover:bg-gray-200 border rounded-lg transition"
+            >
+              🛡️ Moderation Queue
+            </Link>
+          )}
           <span className="px-3 py-1 text-xs font-bold rounded-full bg-slate-900 text-white tracking-wider uppercase">
             {currentRole}
           </span>
@@ -101,10 +113,32 @@ export default async function IndividualCommunityPage({ params }: PageProps) {
               currentUserId={userId} 
             />
 
+            {/* Root Admin Console */}
             {currentRole === "ADMIN" && (
-              <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-xl">
-                <span className="text-xs font-bold text-red-700 tracking-wide uppercase block">Root Admin Console</span>
-                <p className="text-xs text-red-600 mt-1">You have full override capacity inside this workspace row.</p>
+              <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-xl space-y-3">
+                <div>
+                  <span className="text-xs font-bold text-red-700 tracking-wide uppercase block">Root Admin Console</span>
+                  <p className="text-xs text-red-600 mt-0.5">You have full override capacity inside this workspace row.</p>
+                </div>
+
+                {/* --- PHASE 4.2 CANCELLED SESSION PURGING SUITE --- */}
+                {cancelledSessions.length > 0 && (
+                  <div className="pt-3 border-t border-red-200/60 space-y-2">
+                    <p className="text-xs font-semibold text-gray-700">Cancelled Sessions Available for Purging:</p>
+                    <div className="divide-y divide-red-200/40 bg-white rounded-lg border border-red-200/60 overflow-hidden">
+                      {cancelledSessions.map((session) => (
+                        <div key={session.id} className="p-3 flex items-center justify-between gap-4 text-xs">
+                          <span className="font-medium text-gray-900 truncate">{session.title}</span>
+                          <DeleteSessionButton 
+                            sessionId={session.id} 
+                            slug={slug} 
+                            sessionTitle={session.title} 
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
