@@ -5,7 +5,8 @@ import { notFound } from "next/navigation"
 import Link from "next/link"
 import JoinLeaveButton from "@/components/community/JoinLeaveButton"
 import BookingActionButton from "@/components/community/BookingActionButton" 
-import { prisma } from "@/lib/prisma" // 
+import { prisma } from "@/lib/prisma" 
+import RealtimeSessionList from "@/components/community/RealtimeSessionList"
 
 interface PageProps {
   params: Promise<{ communityId?: string; slug?: string }>
@@ -94,57 +95,11 @@ export default async function IndividualCommunityPage({ params }: PageProps) {
               )}
             </div>
 
-            {/* Live Session Inventory Mapping Loops */}
-            <div className="mt-4 flex flex-col gap-3">
-              {sessions.length === 0 ? (
-                <p className="text-sm text-gray-400 py-4 border border-dashed rounded-xl text-center">
-                  No active wellness slots are allocated inside this community registry yet.
-                </p>
-              ) : (
-                sessions.map((session) => {
-                  // 🧠 4. Calculate live operational states inside the map loop
-                  const userHasBooked = session.bookings.some((b) => b.userId === userId)
-                  const isFull = session.seatsRemaining === 0
-
-                  return (
-                    <div key={session.id} className="p-4 border rounded-xl bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-sm text-gray-900">{session.title}</h4>
-                          {/* 🧠 5. Visual Confirmation Badge */}
-                          {userHasBooked && (
-                            <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide">
-                              Your Slot Confirmed
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          🗓️ {new Date(session.startsAt).toLocaleString()}
-                        </p>
-                        {session.description && (
-                          <p className="text-xs text-gray-600 mt-1 italic">{session.description}</p>
-                        )}
-                      </div>
-                      
-                      <div className="flex items-center gap-4 self-end sm:self-center">
-                        <span className={`px-2 py-1 text-[11px] font-bold rounded bg-white border ${
-                          isFull ? "text-red-600 border-red-100 bg-red-50" : "text-gray-700"
-                        }`}>
-                          👥 {session.seatsRemaining} / {session.totalCapacity} Seats Left
-                        </span>
-                        
-                        {/* 🧠 6. Injected Airline-Grade Transactional Button Component */}
-                        <BookingActionButton 
-                          sessionId={session.id} 
-                          hasBooked={userHasBooked} 
-                          isFull={isFull} 
-                        />
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
+            <RealtimeSessionList 
+              initialSessions={sessions} 
+              communityId={community.id} 
+              currentUserId={userId} 
+            />
 
             {currentRole === "ADMIN" && (
               <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-xl">

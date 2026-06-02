@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { requireUserId } from "@/lib/auth/session"
 import { revalidatePath } from "next/cache"
 import { BookingStatus, SessionStatus, AuditAction, AuditEntity } from "@prisma/client"
+import { pusherServer } from "@/lib/pusher-server"
 
 interface ActionResponse {
   success: boolean
@@ -11,12 +12,17 @@ interface ActionResponse {
 }
 
 
-export async function bookSeatAction(sessionId: string) {
+export async function bookSeatAction(sessionId: string):Promise<ActionResponse> {
+  let communityIdToNotify = ""
+  let updatedSeats = 0
+  let updatedStatus: SessionStatus = SessionStatus.OPEN
+
+
   try {
     const userId = await requireUserId()
 
     // 🚀 START INTERACTIVE TRANSACTION
-    return await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       
       // 1. Lock rows securely
       const sessions = await tx.$queryRaw<any[]>`
@@ -27,6 +33,8 @@ export async function bookSeatAction(sessionId: string) {
       `
       const session = sessions[0]
       if (!session) throw new Error("404: Session not found")
+
+      communityIdToNotify = session.communityId
 
       // 2. Structural invariants
       if (session.status === SessionStatus.FULL || session.seatsRemaining <= 0) {
@@ -64,14 +72,14 @@ export async function bookSeatAction(sessionId: string) {
       }
 
       // 4. ATOMICALLY DECREMENT SEATS
-      const nextSeats = session.seatsRemaining - 1
-      const nextStatus = nextSeats === 0 ? SessionStatus.FULL : SessionStatus.OPEN
+      updatedSeats = session.seatsRemaining - 1
+      updatedStatus = updatedSeats === 0 ? SessionStatus.FULL : SessionStatus.OPEN
 
       await tx.wellnessSession.update({
         where: { id: sessionId },
         data: {
-          seatsRemaining: nextSeats,
-          status: nextStatus
+          seatsRemaining: updatedSeats,
+          status: updatedStatus
         }
       })
 
@@ -85,13 +93,29 @@ export async function bookSeatAction(sessionId: string) {
           metadata: {
             communityId: session.communityId,
             seatsBefore: session.seatsRemaining,
-            seatsAfter: nextSeats
+            seatsAfter: updatedSeats
           }
         }
       })
 
-      return { success: true }
+
+      await tx.notification.create({
+        data: {
+          userId,
+          type: "BOOKING_CONFIRMED",
+          message: `🎉 Reservation secured! Your slot for "${session.title}" is officially confirmed.`
+        }
+      })
     })
+
+      await pusherServer.trigger(`community-${communityIdToNotify}`, "availability-changed", {
+      sessionId,
+      seatsRemaining: updatedSeats,
+      status: updatedStatus
+    })
+
+    revalidatePath(`/communities`)
+    return { success: true }
 
   } catch (error: any) {
     console.error("🚨 TRANSACTION ABORTED & ROLLED BACK:", error.message)
@@ -99,25 +123,26 @@ export async function bookSeatAction(sessionId: string) {
       success: false, 
       error: error.message || "An unexpected error disrupted reservation processing." 
     }
-  }finally {
-    revalidatePath(`/communities`)
   }
 }
 
-export async function cancelBookingAction(sessionId: string) {
+export async function cancelBookingAction(sessionId: string): Promise<ActionResponse> {
+  let communityIdToNotify = ""
+  let updatedSeats = 0
+  let updatedStatus: SessionStatus = SessionStatus.OPEN
   try {
     const userId = await requireUserId()
 
-    const result = await prisma.$transaction(async (tx) => {
-      // 1. LOCK THE SESSION ROW
+    await prisma.$transaction(async (tx) => {
       const sessions = await tx.$queryRaw<any[]>`
-        SELECT id, "status", "seatsRemaining", "totalCapacity", "startsAt", "communityId" 
+        SELECT id, "status", "seatsRemaining", "totalCapacity", "startsAt", "communityId", "title" 
         FROM "WellnessSession" 
         WHERE id = ${sessionId} 
         FOR UPDATE
       `
       const session = sessions[0]
       if (!session) throw new Error("404: Session not found")
+      communityIdToNotify = session.communityId
 
       // POLICY A VERIFICATION: Prevent cancellations if the session has already started
       if (new Date(session.startsAt) <= new Date()) {
@@ -136,16 +161,17 @@ export async function cancelBookingAction(sessionId: string) {
       // 3. FLIP BOOKING STATUS TO CANCELLED
       await tx.sessionBooking.update({
         where: { id: booking.id },
-        data: { status: "CANCELLED" }
+        data: { status: BookingStatus.CANCELLED }
       })
 
       // 4. ATOMICALLY INCREMENT SEATS (Never exceed total capacity)
-      const nextSeats = Math.min(session.seatsRemaining + 1, session.totalCapacity)
+      updatedSeats = Math.min(session.seatsRemaining + 1, session.totalCapacity)
+      updatedStatus = SessionStatus.OPEN
       
       await tx.wellnessSession.update({
         where: { id: sessionId },
         data: {
-          seatsRemaining: nextSeats,
+          seatsRemaining: updatedSeats,
           status: "OPEN" // Releasing a seat guarantees it shifts to open state
         }
       })
@@ -160,16 +186,31 @@ export async function cancelBookingAction(sessionId: string) {
           metadata: {
             communityId: session.communityId,
             seatsBefore: session.seatsRemaining,
-            seatsAfter: nextSeats
+            seatsAfter: updatedSeats
           }
         }
       })
 
-      return { success: true }
+      
+      await tx.notification.create({
+        data: {
+          userId,
+          type: "BOOKING_CANCELLED",
+          message: `💼 Cancellation processed. Slot for "${session.title}" has been released.`
+        }
+      })
     })
 
+    await pusherServer.trigger(`community-${communityIdToNotify}`, "availability-changed", {
+      sessionId,
+      seatsRemaining: updatedSeats,
+      status: updatedStatus
+    })
+
+
+
     revalidatePath(`/communities`)
-    return result
+    return {success: true}
 
   } catch (error: any) {
     console.error("🚨 CANCELLATION TRANSACTION FAILED & ROLLED BACK:", error.message)
