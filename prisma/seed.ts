@@ -1,140 +1,209 @@
-import {prisma} from "../src/lib/prisma";
+import "dotenv/config" // Enforces loading your local .env configurations
+import { 
+  PrismaClient, 
+  ReportStatus, 
+  ReportReason, 
+  AuditAction, 
+  AuditEntity,
+  CommunityRole,
+  SessionStatus
+} from "@prisma/client"
+import { PrismaPg } from "@prisma/adapter-pg"
+import pg from "pg"
 
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL })
+
+const adapter = new PrismaPg(pool)
+
+const prisma = new PrismaClient({ adapter })
 
 async function main() {
-  console.log("🌱 Starting database seeding pipeline...");
-  //clearing the database in strict reverse order 
-  console.log("🧹 Clearing existing database records...");
+  console.log(" Initializing target narrative database seed sequence...")
 
-  await prisma.auditLog.deleteMany({});
-  await prisma.sessionBooking.deleteMany({});
-  await prisma.wellnessSession.deleteMany({});
-  await prisma.communityMember.deleteMany({});
+  // 1. CLEAR EXISTING DATA (Reverse relational order to prevent foreign key locks)
+  await prisma.moderationAction.deleteMany()
+  await prisma.report.deleteMany()
+  await prisma.notification.deleteMany()
+  await prisma.auditLog.deleteMany()
+  await prisma.sessionBooking.deleteMany() // Matches your model SessionBooking
+  await prisma.wellnessSession.deleteMany()
+  await prisma.communityMember.deleteMany()
+  await prisma.community.deleteMany()
+  await prisma.user.deleteMany()
 
-  await prisma.community.deleteMany({});
-  await prisma.user.deleteMany({});
-
-  console.log("✨ Database cleared. Constructing fresh mock ecosystem...");
-  // Create users
-  const alice = await prisma.user.create({
+  // ==========================================
+  // 2. GENERATE USERS
+  // ==========================================
+  const superMod = await prisma.user.create({
     data: {
-      name: "Alice Smith",
-      email: "alice@example.com",
-      image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alice",
+      name: "Alex Mercer (Admin)",
+      email: "mod@wellness.test",
+      image: "https://api.dicebear.com/7.x/bottts/svg?seed=alex",
     },
-  });
+  })
 
-  const bob = await prisma.user.create({
+  const standardUser = await prisma.user.create({
     data: {
-      name: "Bob Jones",
-      email: "bob@example.com",
-      image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Bob",
+      name: "Jane Doe (Member)",
+      email: "member@wellness.test",
+      image: "https://api.dicebear.com/7.x/bottts/svg?seed=jane",
     },
-  });
+  })
 
-  const charlie = await prisma.user.create({
+  console.log(`👥 Created Users: ${superMod.email} (Staff) & ${standardUser.email} (Member)`)
+
+  // ==========================================
+  // 3. GENERATE COMMUNITIES
+  // ==========================================
+  const loungeComm = await prisma.community.create({
     data: {
-      name: "Charlie Brown",
-      email: "charlie@example.com",
-      image: "https://api.dicebear.com/7.x/avataaars/svg?seed=Charlie",
+      id: "well1", // Explicit string matches for easy URL testing (/communities/well1)
+      name: "The Wellness Lounge",
+      slug: "well1",
+      description: "A sanctuary for holistic group fitness, custom somatic recovery loops, and open yoga practices.",
+      tags: ["Yoga", "Somatic", "Fitness"],
+      createdById: superMod.id,
+      visibility: "PUBLIC",
     },
-  });
+  })
 
-  console.log(`👤 Created 3 core users: ${alice.name}, ${bob.name}, ${charlie.name}`);
-
-  // Step B: Establish the Hub (Community)
-  const yogaCommunity = await prisma.community.create({
+  const mindComm = await prisma.community.create({
     data: {
-      name: "Morning Yoga Hub",
-      slug: "morning-yoga",
+      id: "mind2",
+      name: "Mindfulness Collective",
+      slug: "mind2",
+      description: "Advanced neurological bio-hacking frameworks, collective transcendental meditation, and clinical sleep therapy forums.",
+      tags: ["Meditation", "Neuro", "Therapy"],
+      createdById: superMod.id,
+      visibility: "PUBLIC",
     },
-  });
+  })
 
-  console.log(`🏛️ Created Community: "${yogaCommunity.name}" [slug: ${yogaCommunity.slug}]`);
-
-  // Step C: Map the Relationships & Roles (Memberships)
+  // Assign internal community workspace directory memberships
   await prisma.communityMember.createMany({
     data: [
-      { userId: alice.id, communityId: yogaCommunity.id, role: "ADMIN" },
-      { userId: bob.id, communityId: yogaCommunity.id, role: "MODERATOR" },
-      { userId: charlie.id, communityId: yogaCommunity.id, role: "MEMBER" },
+      { userId: superMod.id, communityId: loungeComm.id, role: CommunityRole.ADMIN },
+      { userId: standardUser.id, communityId: loungeComm.id, role: CommunityRole.MEMBER },
+      { userId: superMod.id, communityId: mindComm.id, role: CommunityRole.MODERATOR },
+      { userId: standardUser.id, communityId: mindComm.id, role: CommunityRole.MEMBER },
     ],
-  });
+  })
 
-  console.log("👥 Assigned community roles (Alice: ADMIN, Bob: MODERATOR, Charlie: MEMBER)");
+  console.log("🏢 Seeded Communities: 'well1' & 'mind2' with configured access directories.")
 
-  // Step D: Construct the Events (Wellness Sessions)
-  // Session A: Fully available
-  await prisma.wellnessSession.create({
+  // ==========================================
+  // 4. GENERATE SESSIONS
+  // ==========================================
+  const inlineHour = (offset: number) => new Date(Date.now() + offset * 60 * 60 * 1000)
+
+  const sessionOpenA = await prisma.wellnessSession.create({
     data: {
-      communityId: yogaCommunity.id,
-      title: "Introduction to Sunrise Vinyasa",
-      startsAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Happens tomorrow
+      title: "Vinyasa Flow & Dynamic Core Realignment",
+      description: "An open structural mobility series targeting postural restoration and breath mechanics.",
+      startsAt: inlineHour(24), // Tomorrow
+      endsAt: inlineHour(25),
       totalCapacity: 10,
-      seatsRemaining: 10,
-      status: "OPEN",
+      seatsRemaining: 9, // 1 seat will be booked below
+      status: SessionStatus.OPEN,
+      communityId: loungeComm.id,
+      createdByUserId: superMod.id,
     },
-  });
+  })
 
-  // Session B: Almost full (Charlie will book the 4th slot, leaving 1 remaining)
-  const sessionB = await prisma.wellnessSession.create({
+  const sessionFullA = await prisma.wellnessSession.create({
     data: {
-      communityId: yogaCommunity.id,
-      title: "Advanced Breathwork & Pranayama",
-      startsAt: new Date(Date.now() + 48 * 60 * 60 * 1000), // Happens in 2 days
-      totalCapacity: 5,
-      seatsRemaining: 1, // Reflecting that 4 seats are taken/allocated
-      status: "OPEN",
+      title: "[VIP] Clinical Deep Sleep Nidra Soundscape",
+      description: "High-intensity neurological down-regulation session. STRICTLY CLOSED ACCESS.",
+      startsAt: inlineHour(48),
+      endsAt: inlineHour(49),
+      totalCapacity: 2,
+      seatsRemaining: 0, // Enforced system structural ceiling cap limit
+      status: SessionStatus.FULL,
+      communityId: loungeComm.id,
+      createdByUserId: superMod.id,
     },
-  });
+  })
 
-  // Session C: Sold out completely
-  await prisma.wellnessSession.create({
+  const sessionImminentA = await prisma.wellnessSession.create({
     data: {
-      communityId: yogaCommunity.id,
-      title: "Deep Sleep Yoga Nidra",
-      startsAt: new Date(Date.now() + 72 * 60 * 60 * 1000), // Happens in 3 days
-      totalCapacity: 3,
-      seatsRemaining: 0,
-      status: "FULL",
+      title: "Emergency Flash Somatic Breathwork Core",
+      description: "Rapid cortisol reset drill launching immediately. Have blocks and floor space cleared.",
+      startsAt: inlineHour(0.2), // Starts in 12 minutes
+      endsAt: inlineHour(1.2),
+      totalCapacity: 15,
+      seatsRemaining: 15,
+      status: SessionStatus.OPEN,
+      communityId: loungeComm.id,
+      createdByUserId: superMod.id,
     },
-  });
+  })
 
-  console.log("🧘 Generated 3 distinct Wellness Sessions (Available, Almost Full, Sold Out)");
-
-  // Step E: Execute the Transaction (Bookings)
-  // Charlie books a seat in Session B
+  // ==========================================
+  // 5. GENERATE BOOKINGS
+  // ==========================================
+  
+  // standardUser books the open session
   await prisma.sessionBooking.create({
+    data: { userId: standardUser.id, sessionId: sessionOpenA.id },
+  })
+
+  // Fill up the locked session completely
+  await prisma.sessionBooking.createMany({
+    data: [
+      { userId: superMod.id, sessionId: sessionFullA.id },
+      { userId: standardUser.id, sessionId: sessionFullA.id },
+    ],
+  })
+
+  console.log("🎟️ Seeded transactional records and secured structural seat capacities.")
+
+  // ==========================================
+  // 6. GENERATE REPORTS, NOTIFICATIONS & AUDIT LOGS
+  // ==========================================
+  
+  // 6a. Generate a compliance report
+  const reportedSpamItem = await prisma.report.create({
     data: {
-      sessionId: sessionB.id,
-      userId: charlie.id,
-      status: "ACTIVE",
+      reporterUserId: standardUser.id,
+      communityId: loungeComm.id,
+      entityType: "SESSION", // Maps to your schema's string requirement
+      entityId: sessionFullA.id,
+      reason: ReportReason.SPAM,
+      message: "External crypto-marketing vectors detected in the subtext parameters of this description card layout.",
+      status: ReportStatus.OPEN,
     },
-  });
+  })
 
-  console.log(`🎟️ Logged active session booking: Charlie Brown -> ${sessionB.title}`);
-
-  // Step F: Add a Mock Audit Log entry for tracing
+  // 6b. Generate matching audit logs using your exact Enums
   await prisma.auditLog.create({
     data: {
-      action: "BOOK_SEAT",
-      actorId: charlie.id,
-      targetId: sessionB.id,
+      action: AuditAction.SESSION_CREATED, 
+      entityType: AuditEntity.SESSION,
+      actorId: superMod.id,
+      entityId: sessionFullA.id,
+      metadata: { context: "Session was created by Admin prior to report generation." },
     },
-  });
+  })
 
-  console.log("📝 Generated system audit ledger entries.");
-  console.log("✅ Seeding operation completed successfully.");
+  // 6c. Generate a notification to make the UI look alive
+  await prisma.notification.create({
+    data: {
+      userId: standardUser.id,
+      type: "BOOKING_CONFIRMED",
+      message: "Your seat for Vinyasa Flow & Dynamic Core Realignment is confirmed!",
+    }
+  })
+
+  console.log("🚨 Active moderation queues populated.")
+  console.log("🔔 User notifications dispatched.")
+  console.log("🏁 Database state compilation complete. Review packages ready for pipeline integration.")
 }
 
 main()
-  .catch(async (error) => {
-    console.error("Seeding pipeline crashed with an unhandeled exception");
-    await prisma.$disconnect();
-    process.exit(1);
+  .catch((e) => {
+    console.error("❌ Critical script error during compilation cycle:", e)
+    process.exit(1)
   })
-  .finally(
-    async () => {
-    await prisma.$disconnect() ;
-  }
-  );
+  .finally(async () => {
+    await prisma.$disconnect()
+  })
