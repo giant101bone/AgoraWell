@@ -31,6 +31,7 @@ model User {
   posts    CommunityPost[]
   comments PostComment[]
   likes    PostLike[]
+  moodEntries        MoodEntry[]
 }
 
 model Account { 
@@ -124,6 +125,13 @@ enum ModActionType {
   REMOVE_ENTITY
   CANCEL_SESSION
   REJECT_REPORT
+}
+
+enum MoodScore {
+  GREAT
+  GOOD
+  OK
+  BAD
 }
 
 model Community {
@@ -271,6 +279,17 @@ model PostLike {
 
   // Composite unique key prevents a user from liking the same post twice
   @@unique([postId, userId])
+}
+
+model MoodEntry {
+  id        String    @id @default(cuid())
+  userId    String
+  score     MoodScore
+  note      String?   @db.Text
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 

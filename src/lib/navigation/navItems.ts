@@ -2,7 +2,7 @@ export const NAV_ROUTES = {
   DASHBOARD: "/dashboard",
   COMMUNITIES: "/communities",
   MODERATION: "/moderation",
-  // CHRONICLE could be added later when implemented
+  MOOD: "/mood",// CHRONICLE could be added later when implemented
 } as const
 
 export type NavItem = {
@@ -17,6 +17,7 @@ export function getDashboardNavItems(context: { isAuthed: boolean }): NavItem[] 
   return [
     { label: "Dashboard", href: NAV_ROUTES.DASHBOARD, icon: "📊" },
     { label: "Communities", href: NAV_ROUTES.COMMUNITIES, icon: "🏢" },
+    { label: "Mood Tracker", href: NAV_ROUTES.MOOD, icon: "🧠" },
     { label: "Moderation", href: NAV_ROUTES.MODERATION, icon: "🛡️" },
   ]
 }
