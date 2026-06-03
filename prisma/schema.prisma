@@ -28,6 +28,9 @@ model User {
   notifications Notification[]
   reportsFiled   Report[]           @relation("UserReports")
   actionsTaken   ModerationAction[] @relation("ModActions")
+  posts    CommunityPost[]
+  comments PostComment[]
+  likes    PostLike[]
 }
 
 model Account { 
@@ -93,12 +96,14 @@ enum AuditAction {
   SESSION_CREATED
   BOOKING_CREATED
   BOOKING_CANCELLED
+  POST_DELETED
 }
 
 enum AuditEntity {
   SESSION
   BOOKING
   COMMUNITY
+  POST
 }
 
 enum ReportReason {
@@ -133,6 +138,7 @@ model Community {
   members     CommunityMember[] 
   sessions    WellnessSession[]
   reports        Report[]
+  posts CommunityPost[]
   createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
 }
 
@@ -223,4 +229,48 @@ model ModerationAction {
   notes           String?       @db.Text
   createdAt       DateTime      @default(now())
 }
+
+
+model CommunityPost {
+  id          String   @id @default(cuid())
+  communityId String
+  authorId    String
+  content     String   @db.Text
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations (Adjust 'User' and 'Community' to match your actual model names)
+  community   Community     @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  author      User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments    PostComment[]
+  likes       PostLike[]
+}
+
+
+model PostComment {
+  id        String   @id @default(cuid())
+  postId    String
+  authorId  String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+
+model PostLike {
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Composite unique key prevents a user from liking the same post twice
+  @@unique([postId, userId])
+}
+
 

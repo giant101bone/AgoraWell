@@ -11,14 +11,34 @@ interface DashboardLayoutProps {
 export default async function DashboardLayout({ children }: DashboardLayoutProps) {
   const userId = await requireUserId()
 
+  // 1. Existing user info fetch (Unchanged)
   const memberRecord = await prisma.user.findUnique({
     where: { id: userId },
     select: { email: true, name: true, image: true },
   })
 
-  // No globalRole anymore
+  // 2. Existing navigation item evaluation (Unchanged)
   const items = getDashboardNavItems({
     isAuthed: true,
+  })
+
+  // 3. NEW: Fetch communities the current user has joined
+  const joinedCommunities = await prisma.community.findMany({
+    where: {
+      members: {
+        some: {
+          userId: userId, // Uses your secure userId from session
+        },
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+    },
+    orderBy: {
+      name: "asc",
+    },
   })
 
   return (
@@ -29,6 +49,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
         image: memberRecord?.image ?? null,
       }}
       navItems={items}
+      joinedCommunities={joinedCommunities} // 👈 Passed safely into AppShell here
     >
       {children}
     </AppShell>
