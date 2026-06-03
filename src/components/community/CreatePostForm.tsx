@@ -66,8 +66,9 @@ export default function CreatePostForm({ communityId }: { communityId: string })
             alert(`Upload failed: ${error.message}`);
           }}
           appearance={{
-            button: "bg-gray-100 text-gray-700 text-sm px-4 py-2 rounded-md border hover:bg-gray-200 transition-all",
-            allowedContent: "hidden" // hides the messy subtitle text
+            button:
+            "bg-gray-400 text-white text-sm px-4 py-2 rounded-md border border-gray-500 hover:bg-gray-500 transition-all",
+             allowedContent: "hidden",
           }}
           content={{
             button({ ready }) {
