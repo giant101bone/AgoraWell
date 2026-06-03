@@ -11,8 +11,19 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
-        hostname: "*.ufs.sh", // 👈 This catches 9z7kv0j9xb.ufs.sh and any others!
+        hostname: "*.ufs.sh", 
         pathname: "/f/**",
+      },
+      {
+        protocol: "https",
+        hostname: "images.unsplash.com",
+        port: "",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com", // Google Profile Pictures
+        pathname: "/**",
       },
     ],
   },

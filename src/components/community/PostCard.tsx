@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Image from "next/image";
 import { Heart, MessageCircle, Trash2, Send } from "lucide-react";
-import { likePostAction, deletePostAction, commentPostAction } from "@/actions/post.actions";
+import { likePostAction, deletePostAction, commentPostAction , deleteCommentAction } from "@/actions/post.actions";
 
 type PostProps = {
   post: any; // Ideally, define a strict Prisma type here
@@ -57,6 +57,17 @@ export default function PostCard({ post, communityId, currentUserId, isModOrAdmi
     }
   };
 
+  // UI Trigger handler for comment deletions
+  const handleCommentDelete = async (commentId: string) => {
+    if (!confirm("Are you sure you want to delete this comment?")) return;
+    
+    try {
+      await deleteCommentAction(commentId, communityId);
+    } catch (err) {
+      alert("Could not delete comment");
+    }
+  };
+
   return (
     <div className="p-4 border rounded-lg bg-white shadow-sm mb-4">
       <div className="flex items-center justify-between mb-3">
@@ -71,7 +82,7 @@ export default function PostCard({ post, communityId, currentUserId, isModOrAdmi
           <button 
             onClick={handleDelete} 
             disabled={isPending}
-            className="text-gray-400 hover:text-red-500 disabled:opacity-50"
+            className="text-gray-400 hover:text-red-500 disabled:opacity-50 transition-colors"
           >
             <Trash2 size={18} />
           </button>
@@ -81,13 +92,20 @@ export default function PostCard({ post, communityId, currentUserId, isModOrAdmi
       <p className="mb-4 whitespace-pre-wrap">{post.content}</p>
       
       {post.imageUrl && (
-        <div className="relative w-full h-64 mb-4">
+        <div className="relative w-full h-[400px] bg-gray-50 border border-gray-100 rounded-md overflow-hidden mb-4 flex items-center justify-center">
           <Image 
             src={post.imageUrl} 
-            alt="Post attachment" 
-            fill
-            className="object-cover rounded-md"
-          />
+              alt="Post attachment" 
+              fill
+              // FIX 1: Tell Next.js the max width of this image container (max-w-2xl is ~672px)
+              sizes="(max-width: 672px) 100vw, 672px"
+      
+      // FIX 2: Change object-cover to object-contain so portrait images show 100% of their content
+              className="object-contain"
+      
+      // OPTIONAL: If it's the very first post on the feed, load it immediately
+              priority={post.isFirstPost || false} 
+    />
         </div>
       )}
 
@@ -117,17 +135,35 @@ export default function PostCard({ post, communityId, currentUserId, isModOrAdmi
           {/* Loop over existing comments if fetched in your page query setup */}
           {post.comments && post.comments.length > 0 && (
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              {post.comments.map((comment: any) => (
-                <div key={comment.id} className="text-sm bg-gray-50 p-2 rounded-md border border-gray-100">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <span className="font-semibold text-gray-800">{comment.author?.name || "Anonymous"}</span>
-                    <span className="text-xs text-gray-400">
-                      {new Date(comment.createdAt).toLocaleDateString()}
-                    </span>
+              {post.comments.map((comment: any) => {
+                // Determine if current user has permission to delete this specific comment
+                const canDeleteComment = comment.authorId === currentUserId || isModOrAdmin;
+
+                return (
+                  <div key={comment.id} className="text-sm bg-gray-50 p-2 rounded-md border border-gray-100 group relative">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-800">{comment.author?.name || "Anonymous"}</span>
+                        <span className="text-xs text-gray-400">
+                          {new Date(comment.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      
+                      {/* ADDED: Dynamic Delete Comment Action UI */}
+                      {canDeleteComment && (
+                        <button 
+                          onClick={() => handleCommentDelete(comment.id)}
+                          className="text-gray-400 hover:text-red-500 transition-colors p-0.5 md:opacity-0 group-hover:opacity-100"
+                          title="Delete comment"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-gray-600 whitespace-pre-wrap pr-6">{comment.content}</p>
                   </div>
-                  <p className="text-gray-600 whitespace-pre-wrap">{comment.content}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

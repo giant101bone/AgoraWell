@@ -119,3 +119,42 @@ export async function commentPostAction(postId: string, content: string) {
     }
   });
 }
+
+export async function deleteCommentAction(commentId: string, communityId: string) {
+  const userId = await requireUserId()
+
+  try {
+    // 1. Fetch the comment to verify ownership or role
+    const comment = await prisma.postComment.findUnique({
+      where: { id: commentId },
+    })
+
+    if (!comment) throw new Error("Comment not found")
+
+    // 2. Check if user is a Mod/Admin in this community
+    const membership = await prisma.communityMember.findUnique({
+      where: {
+        userId_communityId: { userId, communityId }
+      }
+    })
+
+    const isModOrAdmin = membership?.role === "ADMIN" || membership?.role === "MODERATOR"
+    const isAuthor = comment.authorId === userId
+
+    // 3. Ensure authorization
+    if (!isAuthor && !isModOrAdmin) {
+      throw new Error("Unauthorized to delete this comment")
+    }
+
+    // 4. Delete the comment
+    await prisma.postComment.delete({
+      where: { id: commentId }
+    })
+
+    // 5. Refresh the feed page
+    revalidatePath(`/communities/${communityId}`)
+  } catch (error) {
+    console.error("Failed to delete comment:", error)
+    throw new Error("Failed to delete comment")
+  }
+}
